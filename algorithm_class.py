@@ -2,6 +2,7 @@ from sklearn import preprocessing
 import pandas as pd
 from nltk.tokenize import  word_tokenize
 import numpy as np
+import openpyxl
 
 class TfIdf():
 
@@ -37,7 +38,7 @@ class TfIdf():
     @staticmethod
     def remove_non_numeric_word(df):
         '''Transform non numeric values into non (should be only numeric) and validation for non NaN values'''
-        df = df[df.applymap(NlpClass.isnumber)]
+        df = df[df.applymap(TfIdf.isnumber)]
         df = df.apply(pd.to_numeric, errors='coerce').fillna(0, downcast='infer')
         return df
 
