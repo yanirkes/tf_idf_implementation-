@@ -1,31 +1,32 @@
+
 from sklearn import preprocessing
 import pandas as pd
 from nltk.tokenize import  word_tokenize
 import numpy as np
-import openpyxl
+import time as tm
 
 class TfIdf():
 
     def __init__(self, text_df, text_column_name):
+        self.sentance_word_dict = {}
         self.text_df = text_df
-        self.list_bag_of_word, self.list_of_sentanceWord_dict = self.split_text(self.text_df,text_column_name)
-        self.word_frequencies_df = self.create_initial_df(self.list_of_sentanceWord_dict, self.list_bag_of_word)
+        self.list_bag_of_word = self.split_text(self.text_df,text_column_name)
+        self.set_bag_of_word_frequencies()
+        self.word_frequencies_df = self.create_initial_df(text_column_name)
         self.tfIdf_df = self.create_tfIdf_df(self.word_frequencies_df)
         self.tfIdf_df_norm = self.normalize_numeric_df(self.tfIdf_df)
 
-    def vectorize(self, data, tfidf_vect_fit):
-        X_tfidf = tfidf_vect_fit.transform(data)
-        words = tfidf_vect_fit.get_feature_names()
-        X_tfidf_df = pd.DataFrame(X_tfidf.toarray())
-        X_tfidf_df.columns = words
-        return (X_tfidf_df)
+    def count_unique_word_in_sentance(self, sentance):
+        """
+        Counting the unique word in a sentance transform it into dictionary
+        :param sentance:
+        :return:
+        """
+        sentance_word_dict_temp = self.sentance_word_dict.copy()
+        temp = pd.value_counts(np.array(word_tokenize(sentance))).to_dict()
+        sentance_word_dict_temp.update(temp)
 
-    @staticmethod
-    def count_unique_word_in_sentance(bag_of_word, sentance):
-      sentance_word_dict = dict.fromkeys(bag_of_word,0)
-      for word in sentance:
-        sentance_word_dict[word]+=1
-      return sentance_word_dict
+        return sentance_word_dict_temp
 
     @staticmethod
     def isnumber(x):
@@ -37,45 +38,54 @@ class TfIdf():
 
     @staticmethod
     def remove_non_numeric_word(df):
-        '''Transform non numeric values into non (should be only numeric) and validation for non NaN values'''
+        '''
+        Transform non numeric values into non (should be only numeric) and validation for non NaN values
+        '''
         df = df[df.applymap(TfIdf.isnumber)]
         df = df.apply(pd.to_numeric, errors='coerce').fillna(0, downcast='infer')
         return df
 
-
-    # model func
     def split_text(self,df, text_column_name):
-        '''Main taget its to create 2 objects - a bag of words of the entire data set,
-            and to ceate a list of dic such that each dict will count the word appearances in a single
-            text (a row)
+        """
+        From corpus, transform the df of sentences into a bag of words
+        :param df: Corpus
+        :param text_column_name: Column name
+        :return: bad of words in a list
+        """
+
+        sentance = ' '.join(df[text_column_name].tolist())
+        set_words_in_sentance = word_tokenize(sentance)
+        list_bag_of_word = set(set_words_in_sentance)
+
+        return list_bag_of_word
+
+    def create_initial_df(self, text_column_name):
+        '''
+        Create a frequency df which is the base for calculating the tfidf algorithm.
+        First calculate list of frequency per sentance.
+        Second convert it into data frame
         '''
 
-        list_bag_of_word = {}
-        list_of_sentanceWord_dict = []
-
-        for sentance in df[text_column_name]:
-            set_words_in_sentance = word_tokenize(sentance)
-            list_of_sentanceWord_dict.append(set_words_in_sentance)
-            list_bag_of_word = set(list_bag_of_word)
-            list_bag_of_word = list_bag_of_word.union(set_words_in_sentance)
-        return list_bag_of_word, list_of_sentanceWord_dict
-
-    def create_initial_df(self,list_of_sentanceWord_dict, list_bag_of_word):
-        '''Create a df that will provide the ground base for calculating the tfidf algorithm'''
-        list_word_frequency_in_a_sentence = []
-        for sentance in list_of_sentanceWord_dict:
-            temp = self.count_unique_word_in_sentance(list_bag_of_word, sentance)
-            list_word_frequency_in_a_sentence.append(temp)
-        del temp
-
+        list_word_frequency_in_a_sentence = list(map(lambda x: self.count_unique_word_in_sentance(x),self.text_df[text_column_name]))
         df = pd.DataFrame.from_records(list_word_frequency_in_a_sentence)
-        df = self.remove_non_numeric_word(df)
         return df
 
+    def set_bag_of_word_frequencies(self):
+        if self.list_bag_of_word == 0:
+            raise ValueError("Bage of word list is empty")
+        else:
+            self.sentance_word_dict = dict.fromkeys(self.list_bag_of_word,0)
+        return
+
     def create_tfIdf_df(self,df):
-        ''' Create df_Idf DataFrame DataFrame. dividing each value by the sum of the entire row, each row signify a document
-            In the second step, it calculate the values of entire df. The result would be the relative ratio of a word in the df.
-            A simple multiplication to receive the df_Idf DataFrame'''
+        """
+        Create df_Idf DataFrame DataFrame. dividing each value by the sum of the entire row, each row signify a document
+        In the second step, it calculate the values of entire df. The result would be the relative ratio of a word in the df.
+        A simple multiplication to receive the df_Idf DataFrame
+        :param df:
+        :return: tfIdf data frame
+        """
+
         tf_df = df.divide(df.sum(axis=1),axis='index')
         count_word_in_all_documents = np.log(df.shape[1]/df.sum(axis=0))
         df_tfIdf = tf_df.mul(count_word_in_all_documents, axis=1)
@@ -95,4 +105,8 @@ if __name__ == '__main__':
     df_train = pd.read_excel(train_filename,
                              engine='openpyxl')
 
+    start = tm.time()
     obj = TfIdf(df_train, 'story')
+    end = tm.time()
+
+    print(('vectorizing took %d seconds to run')%(end-start))
